@@ -1,0 +1,5 @@
+app:
+  domain: https://kibana.mycompany.sk
+indexes:
+  events: index:'12345678-1234-1234-1234-123454354367'
+  syslog: index:123456-5345-4536-3456-2342356712
