@@ -1,9 +1,11 @@
 #!/bin/bash/env python3
 
+import sys
 import webbrowser
 import argparse
 import platform
 import yaml
+import pandas as pd
 
 
 def banner():
@@ -78,18 +80,24 @@ def load_config(filename):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Kibanafu parses IP IOCs and builds a query with defined parameters for Kibana.')
+        description='Kibanafu parses IP IOCs and builds a search query with defined parameters for Kibana.')
 
+    parser.add_argument('--name', metavar="NAME",
+                        help='analysis keyword (e.g. Trickbot, Mirai, Zeus, ...)')
+    parser.add_argument('--input', metavar="FILENAME",
+                        help='input xls/xslx file containing IOCs')
+    parser.add_argument('--column', metavar="NAME", required='--input' in sys.argv,
+                        help='column name containing IPs (required for --input)')
+    parser.add_argument('--parsed', metavar="FILENAME",
+                        help='input txt file containing parsed IPs')
+    parser.add_argument('--output', metavar="FILENAME", default="kibana_query.txt",
+                        help='output file for Kibana query (default: kibana_query.txt)')
     parser.add_argument('--index', metavar="NAME", default="syslog",
                         help='index name [events/syslog] (default: syslog)')
     parser.add_argument('--field', metavar="NAME", default="source",
                         help='field name [source/destination] (default: source)')
     parser.add_argument('--time', metavar="TIME", default="7d",
                         help='time frame [15m/30m/1h/24h/7d/30d/90d/1y] (default: 7d)')
-    parser.add_argument('--input', metavar="FILENAME", default="ips.txt",
-                        help='input file containg IPs (default: ips.txt)')
-    parser.add_argument('--output', metavar="FILENAME", default="kibana_query.txt",
-                        help='output file for Kibana query (default: kibana_query.txt)')
     parser.add_argument('--action', metavar="ACTION", default="browser",
                         help='action to execute [browser/file] (default: browser)')
 
@@ -114,8 +122,9 @@ def main():
     index = args.index
     param = args.field
 
-    input_file = args.input
-    output_file = args.output
+    if not args.name is None:
+        analysis_name = args.name
+        print(f"[ Analyzing {analysis_name} ]\n")
 
     config = load_config(".config/config.yml")
     # config = load_config(".config/example.yml")
@@ -126,38 +135,73 @@ def main():
     config_indexes.append(config_events)
     config_indexes.append(config_syslog)
 
-    try:
-        print(f"[*] Loading IPs from '{input_file}'")
-        lines = parse_ips(input_file)
-    except FileNotFoundError:
-        print(f"\n[!] No such file or directory: '{input_file}'")
+    ips = []
+    some_input = False
+    if not args.input is None:
+        some_input = True
+        file_name = args.input
+        target_column = args.column
+        try:
+            xls_file = pd.ExcelFile(file_name)
+            sheet_names = xls_file.sheet_names
+            print(
+                f"[*] Loading IPs from '{file_name}', column '{target_column}'")
+
+            for sheet_name in sheet_names:
+                df = pd.read_excel(file_name, sheet_name=sheet_name)
+                ips_column = df[target_column].tolist()
+                for ip in ips_column:
+                    ips.append(ip)
+        except FileNotFoundError:
+            print(f"\n[!] No such file or directory: '{xls_file}'")
+            print(f"\nExiting program ...\n")
+            exit(1)
+
+    output_file = args.output
+
+    if not args.parsed is None:
+        some_input = True
+        input_file = args.parsed  # already parsed IPs in txt file
+        try:
+            print(f"[*] Loading IPs from '{input_file}'")
+            ips = parse_ips(input_file)
+        except FileNotFoundError:
+            print(f"\n[!] No such file or directory: '{input_file}'")
+            print(f"\nExiting program ...\n")
+            exit(1)
+
+    if some_input:
+        print(f"[*] Configurating '{index}' index with '{param}' field")
+        query_parameter = configurate(index, param)
+
+        print(f"[*] Building Kibana query with defined options")
+        ip_iocs_holder = set(ips)
+        ips = (list(ip_iocs_holder))
+        kibana_query = build_query(ips, query_parameter)
+
+        if action == "browser":
+            time_frame = args.time
+            times = {
+                "15m": "15m",
+                "30m": "30m",
+                "1h": "1h",
+                "24h": "24h/h",
+                "7d": "7d/d",
+                "30d": "30d/d",
+                "90d": "90d/d",
+                "1y": "1y/d"
+            }
+            time_param = times[time_frame]
+            print(f"[*] Opening browser session with built Kibana query")
+            open_browser(domain, index, config_indexes,
+                         kibana_query, time_param)
+        else:
+            print(f"[*] Saving Kibana query to '{output_file}'")
+            save_query_to_file(output_file, kibana_query)
+    else:
+        print(f"[!] No input file was provided")
         print(f"\nExiting program ...\n")
         exit(1)
-
-    print(f"[*] Configurating '{index}' index with '{param}' field")
-    query_parameter = configurate(index, param)
-
-    print(f"[*] Building Kibana query with defined options")
-    kibana_query = build_query(lines, query_parameter)
-
-    if action == "browser":
-        time_frame = args.time
-        times = {
-            "15m": "15m",
-            "30m": "30m",
-            "1h": "1h",
-            "24h": "24h/h",
-            "7d": "7d/d",
-            "30d": "30d/d",
-            "90d": "90d/d",
-            "1y": "1y/d"
-        }
-        time_param = times[time_frame]
-        print(f"[*] Opening browser session with built Kibana query")
-        open_browser(domain, index, config_indexes, kibana_query, time_param)
-    else:
-        print(f"[*] Saving Kibana query to '{output_file}'")
-        save_query_to_file(output_file, kibana_query)
 
     print("\n")
 
