@@ -4,7 +4,6 @@
 </p>
 
 ---
----
 ## :notebook_with_decorative_cover: Pre-requisites
 
 - Python3.X ([download](https://www.python.org/downloads/release/python-3102/))
