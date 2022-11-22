@@ -117,51 +117,75 @@ def main():
 
     args = parse_args()
 
-    action = args.action
-
-    index = args.index
-    param = args.field
-
-    if not args.name is None:
-        analysis_name = args.name
-        print(f"[ Analyzing {analysis_name} ]\n")
-
-    config = load_config(".config/config.yml")
-    # config = load_config(".config/example.yml")
+    config_path = ".config/config.yml"
+    config = load_config(config_path)
     domain = config['app']['domain']
     config_events = config['indexes']['events']
     config_syslog = config['indexes']['syslog']
     config_indexes = []
     config_indexes.append(config_events)
     config_indexes.append(config_syslog)
+    config_arguments = config['arguments']
+    
+    config_state = config['arguments']['state']
+
+    if config_state == "enabled":
+        print(f"[*] Loading arguments from '.config/config.yml'")
+        try:
+            analysis_name = config['arguments']['name']
+            file_name = config['arguments']['input']
+            target_column = config['arguments']['column']
+            input_file = config['arguments']['parsed']
+            output_file = config['arguments']['output'] or "kibana_query.txt"
+            index = config['arguments']['index'] or "syslog"
+            param = config['arguments']['field'] or "source"
+            time_frame = config['arguments']['time'] or "7d"
+            action = config['arguments']['action'] or "browser"
+        except KeyError:
+            print(f"[!] Error encountered while loading '{config_path}'. Missing argument(s).")
+            print(f"\nExiting program ...\n")
+            exit(1)  
+    elif config_state == "disabled":
+        analysis_name = args.name
+        file_name = args.input
+        target_column = args.column
+        input_file = args.parsed
+        output_file = args.output
+        index = args.index
+        param = args.field
+        time_frame = args.time
+        action = args.action
+
+    if not analysis_name is None:
+        print(f"\n[ Analyzing {analysis_name} ]\n")
 
     ips = []
     some_input = False
-    if not args.input is None:
+    if not file_name is None and not target_column is None:
         some_input = True
-        file_name = args.input
-        target_column = args.column
         try:
             xls_file = pd.ExcelFile(file_name)
             sheet_names = xls_file.sheet_names
             print(
                 f"[*] Loading IPs from '{file_name}', column '{target_column}'")
 
-            for sheet_name in sheet_names:
-                df = pd.read_excel(file_name, sheet_name=sheet_name)
-                ips_column = df[target_column].tolist()
-                for ip in ips_column:
-                    ips.append(ip)
+            try:
+                for sheet_name in sheet_names:
+                    df = pd.read_excel(file_name, sheet_name=sheet_name)
+                    ips_column = df[target_column].tolist()
+                    for ip in ips_column:
+                        ips.append(ip)
+            except KeyError:
+                print(f"\n[!] No such file or directory: '{xls_file}'")
+                print(f"\nExiting program ...\n")
+                exit(1)       
         except FileNotFoundError:
             print(f"\n[!] No such file or directory: '{xls_file}'")
             print(f"\nExiting program ...\n")
             exit(1)
 
-    output_file = args.output
-
-    if not args.parsed is None:
+    if not input_file is None:  # already parsed IPs in txt file
         some_input = True
-        input_file = args.parsed  # already parsed IPs in txt file
         try:
             print(f"[*] Loading IPs from '{input_file}'")
             ips = parse_ips(input_file)
@@ -169,6 +193,7 @@ def main():
             print(f"\n[!] No such file or directory: '{input_file}'")
             print(f"\nExiting program ...\n")
             exit(1)
+
 
     if some_input:
         print(f"[*] Configurating '{index}' index with '{param}' field")
@@ -180,7 +205,6 @@ def main():
         kibana_query = build_query(ips, query_parameter)
 
         if action == "browser":
-            time_frame = args.time
             times = {
                 "15m": "15m",
                 "30m": "30m",
