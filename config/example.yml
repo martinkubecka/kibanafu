@@ -1,0 +1,22 @@
+app:
+  domain: http://example.com
+indexes:
+  events: index:'123123123123123123123123123123'
+  syslog: index:12312312323213123231231231231
+arguments:
+  state: "disabled"
+  name: 
+  input: 
+  column: 
+  parsed: 
+  output:
+  index: 
+  field: 
+  time: 
+  action: 
+
+# When `state` (key) is set to the string "enabled" (value) in the 
+# dictionary `arguments` inside the `.config/config.yml` file, you can use ***kibanafu**** 
+# without any arguments in the CLI (Command-line interface) and simply fill out
+# the rest of the entries which are contained in the `arguments` dictionary.
+# This feature provides you with an easy way of chaning the application's defaults.  
