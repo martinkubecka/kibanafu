@@ -8,7 +8,6 @@ import platform
 import yaml
 import pandas as pd
 
-# TODO: rework logging to support Windows
 
 def banner():
     print(r"""
@@ -28,7 +27,9 @@ def configurate(index, param):
             query_parameter = "destination.ip : "
         else:
             print(f"[{time.strftime('%H:%M:%S')}] [ERROR] Invalid paramter")
-            # logging.error("Invalid paramter")
+            logging.error("Invalid paramter")
+            print(f"\nExiting program ...\n")
+            exit(1)
     elif index == "syslog":
         if param == "source":
             query_parameter = "extra.event.src_ip : "
@@ -36,10 +37,14 @@ def configurate(index, param):
             query_parameter = "extra.event.dest_ip : "
         else:
             print(f"[{time.strftime('%H:%M:%S')}] [ERROR] Invalid paramter")
-            # logging.error("Invalid paramter")
+            logging.error("Invalid paramter")
+            print(f"\nExiting program ...\n")
+            exit(1)
     else:
-        print(f"[{time.strftime('%H:%M:%S')}] [ERROR]  Invalid index")
-        # logging.error("Invalid index")
+        print(f"[{time.strftime('%H:%M:%S')}] [ERROR] Invalid index")
+        logging.error("Invalid index")
+        print(f"\nExiting program ...\n")
+        exit(1)
 
     return query_parameter
 
@@ -84,12 +89,25 @@ def load_config(filename):
 
 
 def init_logger():
-    logging_path = f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/logs"
-    if not os.path.isdir(logging_path):
-        os.mkdir(logging_path)
-    logging.basicConfig(format='%(created)f; %(asctime)s; %(levelname)s; %(name)s; %(message)s',
-                        filename=f"{logging_path}/{(os.path.splitext(__file__)[0]).split('/')[-1]}.log", level=logging.DEBUG)
-    logger = logging.getLogger('__name__')
+    machine_platfrom = platform.system()
+
+    if machine_platfrom.lower() == "linux":
+        logging_path = f"{os.path.dirname(os.path.realpath(sys.argv[0]))}/logs"
+        if not os.path.isdir(logging_path):
+            os.mkdir(logging_path)
+        logging.basicConfig(format='%(created)f; %(asctime)s; %(levelname)s; %(name)s; %(message)s',
+                            filename=f"{logging_path}/{(os.path.splitext(__file__)[0]).split('/')[-1]}.log", level=logging.DEBUG)
+        logger = logging.getLogger('__name__')
+
+    elif machine_platfrom.lower() == "windows":
+        logging_path = f"{os.path.dirname(os.path.realpath(sys.argv[0]))}\logs"
+        if not os.path.isdir(logging_path):
+            os.mkdir(logging_path)
+        file_name = (os.path.splitext(__file__)[0]).split('\\')[-1]
+        print(f'{file_name}')
+        logging.basicConfig(format='%(created)f; %(asctime)s; %(levelname)s; %(name)s; %(message)s',
+                            filename=f"{logging_path}\{file_name}.log", level=logging.DEBUG)
+        logger = logging.getLogger('__name__')
 
 
 def arg_formatter():
@@ -100,9 +118,10 @@ def arg_formatter():
 
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=arg_formatter(
-    ), description='Parse IP IOCs and build a search query for Kibana with defined parameters.')
+    ), description='Kibanafu parses IP IOCs and builds a search query with defined parameters for Kibana.')
 
-    parser.add_argument('-q', '--quiet', help="do not print banner", action='store_true')
+    parser.add_argument(
+        '-q', '--quiet', help="do not print banner", action='store_true')
     parser.add_argument('-n', '--name', metavar="NAME",
                         help='analysis keyword (e.g. Trickbot, Mirai, Zeus, ...)')
     parser.add_argument('-i', '--input', metavar="FILENAME",
@@ -127,12 +146,12 @@ def parse_args():
 
 
 def main():
-    # init_logger()
+    init_logger()
 
     machine_platfrom = platform.system()
     if machine_platfrom == "Darwin":    # Mac
         print(f"[{time.strftime('%H:%M:%S')}] [ERROR] Unsupported platform")
-        # logging.error("Unsupported platform")
+        logging.error("Unsupported platform")
         print("\nExiting program ...\n")
         exit(1)
 
@@ -149,14 +168,14 @@ def main():
     config_indexes = []
     config_indexes.append(config_events)
     config_indexes.append(config_syslog)
-    config_arguments = config['arguments']
 
+    config_arguments = config['arguments']
     config_state = config['arguments']['state']
 
     if config_state == "enabled":
         print(
             f"[{time.strftime('%H:%M:%S')}] [INFO] Loading arguments from '{config_path}'")
-        # logging.info(f"Loading arguments from '{config_path}'")
+        logging.info(f"Loading arguments from '{config_path}'")
 
         try:
             analysis_name = config['arguments']['name']
@@ -171,7 +190,7 @@ def main():
         except KeyError:
             print(
                 f"[{time.strftime('%H:%M:%S')}] [ERROR] Missing argument(s) in '{config_path}'")
-            # logging.error(f"Missing argument(s) in '{config_path}'")
+            logging.error(f"Missing argument(s) in '{config_path}'")
             print(f"\nExiting program ...\n")
             exit(1)
 
@@ -188,7 +207,7 @@ def main():
 
     if not analysis_name is None:
         print(f"\n[ Analyzing {analysis_name} ]\n")
-        # logging.info(f"Analyzing {analysis_name}")
+        logging.info(f"Analyzing {analysis_name}")
 
     ips = []
     some_input = False
@@ -199,7 +218,8 @@ def main():
             sheet_names = xls_file.sheet_names
             print(
                 f"[{time.strftime('%H:%M:%S')}] [INFO] Loading IPs from '{file_name}', column '{target_column}'")
-            # logging.info(f"Loading IPs from '{file_name}', column '{target_column}'")
+            logging.info(
+                f"Loading IPs from '{file_name}', column '{target_column}'")
 
             try:
                 for sheet_name in sheet_names:
@@ -210,13 +230,13 @@ def main():
             except KeyError:
                 print(
                     f"[{time.strftime('%H:%M:%S')}] [ERROR] No such file or directory: '{file_name}'")
-                # logging.error(f"No such file or directory: '{file_name}'")
+                logging.error(f"No such file or directory: '{file_name}'")
                 print(f"\nExiting program ...\n")
                 exit(1)
         except FileNotFoundError:
             print(
                 f"[{time.strftime('%H:%M:%S')}] [ERROR] No such file or directory: '{file_name}'")
-            # logging.error(f"No such file or directory: '{file_name}'")
+            logging.error(f"No such file or directory: '{file_name}'")
             print(f"\nExiting program ...\n")
             exit(1)
 
@@ -225,25 +245,25 @@ def main():
         try:
             print(
                 f"[{time.strftime('%H:%M:%S')}] [INFO] Loading IPs from '{input_file}'")
-            # logging.info(f"Loading IPs from '{input_file}'")
+            logging.info(f"Loading IPs from '{input_file}'")
             ips = parse_ips(input_file)
         except FileNotFoundError:
             print(
                 f"[{time.strftime('%H:%M:%S')}] [ERROR] No such file or directory: '{input_file}'")
-            # logging.error(f"No such file or directory: '{input_file}'")
+            logging.error(f"No such file or directory: '{input_file}'")
             print(f"\nExiting program ...\n")
             exit(1)
 
     if some_input:
         print(
             f"[{time.strftime('%H:%M:%S')}] [INFO] Configurating '{index}' index with '{param}' field")
-        # logging.info(f"Configurating '{index}' index with '{param}' field")
+        logging.info(f"Configurating '{index}' index with '{param}' field")
 
         query_parameter = configurate(index, param)
 
         print(
             f"[{time.strftime('%H:%M:%S')}] [INFO] Building Kibana query with defined options")
-        # logging.info(f"Building Kibana query with defined options")
+        logging.info(f"Building Kibana query with defined options")
 
         ip_iocs_holder = set(ips)
         ips = (list(ip_iocs_holder))
@@ -260,20 +280,27 @@ def main():
                 "90d": "90d/d",
                 "1y": "1y/d"
             }
-            time_param = times[time_frame]
+            time_param = times.get(time_frame)
+
+            if not time_param:
+                print(
+                    f"[{time.strftime('%H:%M:%S')}] [WARNING] Invalid time parameter '{time_frame}', defaulting to '7d'")
+                logging.warning(f"Invalid time parameter, defaulting to '7d'")
+                time_param = times.get("7d")
+
             print(
                 f"[{time.strftime('%H:%M:%S')}] [INFO] Opening browser session with built search query\n")
-            # logging.info(f"Opening browser session with built search query")
+            logging.info(f"Opening browser session with built search query")
             open_browser(domain, index, config_indexes,
                          kibana_query, time_param)
         else:
             print(
                 f"[{time.strftime('%H:%M:%S')}] [INFO] Saving search query to '{output_file}'\n")
-            # logging.info(f"Saving search query to '{output_file}'")
+            logging.info(f"Saving search query to '{output_file}'")
             save_query_to_file(output_file, kibana_query)
     else:
         print(f"[{time.strftime('%H:%M:%S')}] [ERROR] No input file was provided")
-        # logging.error(f"No input file was provided")
+        logging.error(f"No input file was provided")
         print(f"\nExiting program ...\n")
         exit(1)
 
